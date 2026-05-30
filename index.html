@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>特战干员：往里豪！狂袭</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: #0a2f1f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', 'Press Start 2P', 'Chalkboard SE', 'Comic Neue', cursive, monospace;
+            touch-action: pan-x pan-y;
+        }
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+            background: #1e4d2e;
+            border-radius: 32px;
+            box-shadow: 0 20px 35px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #86bf8c;
+            cursor: pointer;
+            touch-action: none;
+        }
+        .game-ui {
+            position: absolute;
+            top: 12px;
+            left: 0;
+            right: 0;
+            padding: 0 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .settings-btn {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            border-radius: 40px;
+            padding: 6px 10px;
+            color: #ffde7a;
+            font-weight: bold;
+            font-size: 1rem;
+            display: flex;
+            gap: 6px;
+            pointer-events: auto;
+            cursor: pointer;
+            border: 1px solid gold;
+        }
+        .volume-icon { font-size: 1.2rem; }
+        .hp-bar, .score-board, .shop-btn, .skill-btn {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            pointer-events: auto;
+        }
+        .score-board { display: flex; gap: 10px; color: #ffd966; }
+        .shop-btn { background: #d4af37; color: #2c1e0f; cursor: pointer; border: none; font-family: monospace; }
+        .skill-btn { background: #7b2f9d; color: white; cursor: pointer; border: 1px solid #ffaa44; margin-left: 5px; }
+        .revive-overlay, .shop-overlay, .start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            gap: 20px;
+            border-radius: 32px;
+            color: #ffeb99;
+            text-align: center;
+        }
+        .revive-box, .shop-box, .start-box {
+            background: #2a2418;
+            padding: 25px 20px;
+            border-radius: 48px;
+            border: 2px solid #ffb347;
+            width: 85%;
+        }
+        .revive-btn, .shop-item, .start-btn {
+            background: gold;
+            border: none;
+            padding: 10px 16px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 60px;
+            margin: 10px 0;
+            width: 90%;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        .deny-btn { background: #5a3e2e; color: #ccc; }
+        .shop-item { background: #3a6b4b; color: white; border: 1px solid #ffd966; }
+        .start-btn { background: #ff6600; color: white; font-size: 1.8rem; letter-spacing: 4px; }
+        .hidden { display: none; }
+        .skill-cooldown {
+            font-size: 0.7rem;
+            background: rgba(0,0,0,0.7);
+            border-radius: 12px;
+            padding: 2px 6px;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div class="game-ui">
+        <div class="settings-btn" id="settingsBtn">
+            <span>⚙️</span>
+            <span class="volume-icon" id="volumeIcon">🔊</span>
+        </div>
+        <div class="score-board">
+            <span>🔫 Lv.<span id="weaponLevel">1</span></span>
+            <span>🏆 <span id="totalScore">0</span></span>
+            <span>🌊 <span id="waveNum">1</span></span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+            <button class="skill-btn" id="skillBtn">✨ 技能(全屏)</button>
+            <div class="hp-bar">❤️ <span id="healthValue">5</span></div>
+            <button class="shop-btn" id="openShopBtn">💰 店</button>
+        </div>
+    </div>
+    
+    <!-- 开始游戏遮罩 -->
+    <div id="startOverlay" class="start-overlay">
+        <div class="start-box">
+            <div style="font-size:2.5rem;">🎖️ 特战干员 🎖️</div>
+            <div style="margin:15px 0; font-size:1.2rem;">土匪大军来袭！守住阵地！</div>
+            <button id="startGameBtn" class="start-btn">👉 往里豪！ 👈</button>
+            <small style="display:block; margin-top:15px;">滑动屏幕移动 | 自动开火 | 超快弹道</small>
+        </div>
+    </div>
+    
+    <!-- 复活/重新开始面板 -->
+    <div id="revivePanel" class="revive-overlay hidden">
+        <div class="revive-box">
+            <div style="font-size:2rem;">💀 战死 💀</div>
+            <div style="margin:12px 0;">花费 6 金币复活 / 免费重新开始</div>
+            <button id="reviveConfirmBtn" class="revive-btn">💎 复活 (6金币)</button>
+            <button id="restartBtn" class="revive-btn" style="background:#3a6ea5;">🔄 重新开局</button>
+            <button id="reviveCancelBtn" class="revive-btn deny-btn">🚪 退出</button>
+        </div>
+    </div>
+    
+    <!-- 商店面板 -->
+    <div id="shopPanel" class="shop-overlay hidden">
+        <div class="shop-box">
+            <div style="font-size:1.8rem;">🛒 战术补给 🛒</div>
+            <div>💰 持有金币: <span id="userCoins">0</span></div>
+            <button id="buyScreenClear" class="shop-item">✨ 全屏秒杀 (5金币)</button>
+            <button id="buyAOE" class="shop-item">💥 范围爆破 (3金币)</button>
+            <button id="closeShopBtn" class="revive-btn deny-btn" style="background:#333;">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let cw = 400, ch = 600;
+        canvas.width = cw; canvas.height = ch;
+        
+        // ========== 游戏状态 ==========
+        let gameRunning = false;          // 初始为false，需要点击开始
+        let gameInitialized = false;      // 是否首次启动过（音频相关）
+        let health = 5;
+        let maxHealth = 5;
+        let weaponLevel = 1;
+        let totalScore = 0;               // 金币
+        let wave = 1;                   
+        let enemiesKilledThisWave = 0;  
+        
+        let enemies = [];
+        let powerups = [];
+        let healthpacks = [];
+        let aoepickups = [];
+        let screenClearPickups = [];
+        
+        // 子弹系统
+        let bullets = [];
+        let hitEffects = [];
+        let muzzleFlashes = [];
+        
+        // 技能系统：主动全屏秒杀技能（冷却60帧约1秒）
+        let skillCooldown = 0;
+        const SKILL_MAX_COOLDOWN = 60;     // 1秒冷却(60帧)
+        
+        // 射击参数
+        let shootCooldown = 0;
+        let baseShootDelay = 2;            // 极快射速
+        
+        // 玩家
+        const player = { x: cw/2, y: ch - 70, width: 36, height: 48 };
+        
+        // 滑动控制
+        let touchStartX = 0, isTouching = false;
+        let enemySpawnTimer = 0;
+        let eliteSpawnedForWave = false;
+        let bossSpawnedForWave = false;
+        
+        // 音频
+        let bgmEnabled = true;
+        let audioCtx = null;
+        let musicGain = null;
+        let musicSource = null;
+        let drumTimer = null;
+        
+        // UI元素
+        const healthSpan = document.getElementById('healthValue');
+        const weaponLevelSpan = document.getElementById('weaponLevel');
+        const totalScoreSpan = document.getElementById('totalScore');
+        const waveNumSpan = document.getElementById('waveNum');
+        const startOverlay = document.getElementById('startOverlay');
+        const revivePanel = document.getElementById('revivePanel');
+        const shopPanel = document.getElementById('shopPanel');
+        const userCoinsSpan = document.getElementById('userCoins');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const reviveConfirm = document.getElementById('reviveConfirmBtn');
+        const reviveCancel = document.getElementById('reviveCancelBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const openShopBtn = document.getElementById('openShopBtn');
+        const closeShopBtn = document.getElementById('closeShopBtn');
+        const buyScreenClear = document.getElementById('buyScreenClear');
+        const buyAOE = document.getElementById('buyAOE');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const volumeIcon = document.getElementById('volumeIcon');
+        const skillBtn = document.getElementById('skillBtn');
+        
+        function updateUI() {
+            healthSpan.innerText = health;
+            weaponLevelSpan.innerText = weaponLevel;
+            totalScoreSpan.innerText = totalScore;
+            waveNumSpan.innerText = wave;
+            if(userCoinsSpan) userCoinsSpan.innerText = totalScore;
+            // 更新技能按钮显示
+            if(skillCooldown > 0) {
+                skillBtn.innerText = `⏳ 技能(${Math.ceil(skillCooldown/6)}s)`;
+                skillBtn.style.opacity = '0.5';
+            } else {
+                skillBtn.innerText = `✨ 全屏技能`;
+                skillBtn.style.opacity = '1';
+            }
+        }
+        
+        function addScore(amount) { totalScore += amount; updateUI(); }
+        
+        // 全屏技能（主动技）
+        function useActiveSkill() {
+            if(!gameRunning) return false;
+            if(skillCooldown > 0) {
+                alert(`技能冷却中！${Math.ceil(skillCooldown/6)}秒后可用`);
+                return false;
+            }
+            // 全屏秒杀所有敌人
+            let killedCount = enemies.length;
+            for(let e of enemies) {
+                addScore(e.scoreValue || 10);
+                if(Math.random()<0.3 && health<maxHealth) dropHealth(e.x, e.y);
+                hitEffects.push({ x: e.x + e.width/2, y: e.y + e.height/2, timer: 12 });
+            }
+            enemies = [];
+            if(killedCount>0) {
+                for(let i=0;i<Math.min(killedCount,3);i++) {
+                    enemiesKilledThisWave++;
+                    checkWaveAdvancement();
+                }
+            }
+            skillCooldown = SKILL_MAX_COOLDOWN;
+            updateUI();
+            // 播放技能音效
+            if(bgmEnabled && audioCtx) {
+                try {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.value = 300;
+                    gain.gain.value = 0.2;
+                    osc.type = 'sine';
+                    osc.start();
+                    gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.3);
+                    osc.stop(audioCtx.currentTime + 0.3);
+                } catch(e) {}
+            }
+            return true;
+        }
+        
+        // 射击音效
+        function playShootSound() {
+            if(!bgmEnabled || !audioCtx || !gameRunning) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.value = 600 + Math.random() * 200;
+                gain.gain.value = 0.06;
+                osc.type = 'triangle';
+                osc.start();
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.06);
+                osc.stop(audioCtx.currentTime + 0.06);
+            } catch(e) {}
+        }
+        
+        function shootBullet() {
+            if(!gameRunning) return;
+            let playerCenterX = player.x + player.width/2;
+            let bulletDamage = weaponLevel;
+            let bulletCount = Math.min(3, 1 + Math.floor(weaponLevel / 5));
+            for(let b = 0; b < bulletCount; b++) {
+                let offsetX = (b - (bulletCount-1)/2) * 8;
+                bullets.push({
+                    x: playerCenterX + offsetX - 4,
+                    y: player.y - 12,
+                    width: 8,
+                    height: 14,
+                    damage: bulletDamage,
+                    speedY: -11,
+                    trail: [{x: playerCenterX + offsetX, y: player.y - 12}]
+                });
+            }
+            muzzleFlashes.push({ x: player.x + player.width/2 - 10, y: player.y - 6, timer: 3 });
+            playShootSound();
+        }
+        
+        function updateBullets() {
+            for(let i = 0; i < bullets.length; i++) {
+                let bullet = bullets[i];
+                bullet.y += bullet.speedY;
+                if(!bullet.trail) bullet.trail = [];
+                bullet.trail.unshift({x: bullet.x + bullet.width/2, y: bullet.y + bullet.height/2});
+                if(bullet.trail.length > 4) bullet.trail.pop();
+                if(bullet.y + bullet.height < 0 || bullet.y > ch) {
+                    bullets.splice(i,1);
+                    i--;
+                    continue;
+                }
+                let hit = false;
+                for(let j = 0; j < enemies.length; j++) {
+                    let e = enemies[j];
+                    if(bullet.x < e.x + e.width && bullet.x + bullet.width > e.x &&
+                       bullet.y < e.y + e.height && bullet.y + bullet.height > e.y) {
+                        hit = true;
+                        let remaining = bullet.damage;
+                        if(e.hasShield && e.shieldHp > 0) {
+                            let absorb = Math.min(e.shieldHp, remaining);
+                            e.shieldHp -= absorb;
+                            remaining -= absorb;
+                            if(e.shieldHp <= 0) e.hasShield = false;
+                        }
+                        if(remaining > 0) e.hp -= remaining;
+                        hitEffects.push({ x: e.x + e.width/2, y: e.y + e.height/2, timer: 6 });
+                        if(e.hp <= 0) {
+                            addScore(e.scoreValue);
+                            if(Math.random() < 0.28 && weaponLevel<10) dropPowerup(e.x, e.y);
+                            if(Math.random() < 0.2 && health<maxHealth) dropHealth(e.x, e.y);
+                            if(Math.random() < 0.4) dropAOEItem(e.x, e.y);
+                            if(Math.random() < 0.1) dropScreenClearItem(e.x, e.y);
+                            enemiesKilledThisWave++;
+                            if(e.type === 'boss') advanceWave();
+                            else if(e.type === 'elite') advanceWave();
+                            else checkWaveAdvancement();
+                            enemies.splice(j,1);
+                            j--;
+                        }
+                        break;
+                    }
+                }
+                if(hit) { bullets.splice(i,1); i--; }
+            }
+        }
+        
+        function useScreenClear() {
+            let killedCount = enemies.length;
+            for(let e of enemies) {
+                addScore(e.scoreValue || 10);
+                if(Math.random()<0.3 && health<maxHealth) dropHealth(e.x, e.y);
+                hitEffects.push({ x: e.x + e.width/2, y: e.y + e.height/2, timer: 10 });
+            }
+            enemies = [];
+            if(killedCount>0) {
+                for(let i=0;i<Math.min(killedCount,3);i++) {
+                    enemiesKilledThisWave++;
+                    checkWaveAdvancement();
+                }
+            }
+        }
+        
+        function useAOE() {
+            let centerX = player.x + player.width/2;
+            let centerY = player.y + player.height/2;
+            let radius = 110;
+            let damage = 200;
+            for(let i=0;i<enemies.length;i++) {
+                let e = enemies[i];
+                let enemyCenterX = e.x + e.width/2;
+                let enemyCenterY = e.y + e.height/2;
+                let dist = Math.hypot(centerX - enemyCenterX, centerY - enemyCenterY);
+                if(dist < radius) {
+                    let remaining = damage;
+                    if(e.hasShield && e.shieldHp>0) {
+                        let absorb = Math.min(e.shieldHp, remaining);
+                        e.shieldHp -= absorb;
+                        remaining -= absorb;
+                        if(e.shieldHp<=0) e.hasShield=false;
+                    }
+                    if(remaining>0) e.hp -= remaining;
+                    if(e.hp <= 0) {
+                        addScore(e.scoreValue || 10);
+                        hitEffects.push({ x: e.x + e.width/2, y: e.y + e.height/2, timer: 10 });
+                        if(Math.random()<0.25 && weaponLevel<10) dropPowerup(e.x, e.y);
+                        if(Math.random()<0.2) dropHealth(e.x, e.y);
+                        enemies.splice(i,1);
+                        i--;
+                        enemiesKilledThisWave++;
+                        checkWaveAdvancement();
+                    } else {
+                        hitEffects.push({ x: e.x + e.width/2, y: e.y + e.height/2, timer: 5 });
+                    }
+                }
+            }
+        }
+        
+        function checkWaveAdvancement() {
+            if(enemiesKilledThisWave >= 5) {
+                enemiesKilledThisWave = 0;
+                if(wave % 10 === 0 && !bossSpawnedForWave) {
+                    spawnBoss(); bossSpawnedForWave = true; return true;
+                } else if(wave % 5 === 0 && !eliteSpawnedForWave && !bossSpawnedForWave) {
+                    spawnElite(); eliteSpawnedForWave = true; return true;
+                }
+            }
+            return false;
+        }
+        
+        function advanceWave() { wave++; enemiesKilledThisWave = 0; eliteSpawnedForWave = false; bossSpawnedForWave = false; updateUI(); }
+        
+        function spawnEnemy() {
+            let baseHp = 3 + Math.floor(weaponLevel * 0.6);
+            baseHp = Math.min(14, Math.max(3, baseHp));
+            enemies.push({
+                x: Math.random() * (cw - 40) + 10, y: -45, width: 34, height: 42,
+                hp: baseHp, maxHp: baseHp, speedY: 0.5 + Math.random() * 0.6,
+                type: 'normal', hasShield: false, shieldHp: 0, scoreValue: 10
+            });
+        }
+        
+        function spawnElite() {
+            let shieldHp = 8 + Math.floor(weaponLevel * 0.7);
+            let baseHp = 12 + Math.floor(weaponLevel * 0.6);
+            enemies.push({
+                x: Math.random() * (cw - 55) + 15, y: -60, width: 46, height: 56,
+                hp: baseHp, maxHp: baseHp, speedY: 0.7, type: 'elite', hasShield: true,
+                shieldHp: shieldHp, scoreValue: 50
+            });
+        }
+        
+        function spawnBoss() {
+            let shieldHp = 22 + Math.floor(weaponLevel * 1.2);
+            let baseHp = 32 + Math.floor(weaponLevel * 1.5);
+            enemies.push({
+                x: cw/2 - 45, y: -85, width: 90, height: 90,
+                hp: baseHp, maxHp: baseHp, speedY: 0.45, type: 'boss', hasShield: true,
+                shieldHp: shieldHp, scoreValue: 200
+            });
+        }
+        
+        function dropPowerup(x, y) { if(weaponLevel<10) powerups.push({ x: x+12, y: y, width: 22, height: 22, type: 'weapon_upgrade', speedY: 1.6 }); }
+        function dropHealth(x, y) { if(health<maxHealth) healthpacks.push({ x: x+12, y: y, width: 22, height: 22, type: 'health', speedY: 1.6, healAmount: 1 }); }
+        function dropAOEItem(x, y) { aoepickups.push({ x: x+12, y: y, width: 24, height: 24, type: 'aoe_item', speedY: 1.5 }); }
+        function dropScreenClearItem(x, y) { screenClearPickups.push({ x: x+12, y: y, width: 28, height: 28, type: 'clear_item', speedY: 1.5 }); }
+        
+        function checkEnemiesCross() {
+            for(let i=0;i<enemies.length;i++) {
+                let e = enemies[i];
+                if(e.y + e.height >= ch - 28) {
+                    health = Math.max(0, health - (e.type === 'boss' ? 2 : 1));
+                    updateUI();
+                    enemies.splice(i,1);
+                    i--;
+                    if(health <= 0 && gameRunning) gameOver();
+                }
+            }
+        }
+        
+        function updatePickups() {
+            for(let i=0;i<powerups.length;i++) {
+                let p = powerups[i];
+                p.y += p.speedY;
+                if(p.y + p.height > ch) { powerups.splice(i,1); i--; continue; }
+                if(p.x < player.x+player.width && p.x+p.width > player.x && p.y < player.y+player.height && p.y+p.height > player.y) {
+                    if(p.type === 'weapon_upgrade' && weaponLevel<10) { weaponLevel++; updateUI(); }
+                    powerups.splice(i,1); i--;
+                }
+            }
+            for(let i=0;i<healthpacks.length;i++) {
+                let h = healthpacks[i];
+                h.y += h.speedY;
+                if(h.y + h.height > ch) { healthpacks.splice(i,1); i--; continue; }
+                if(h.x < player.x+player.width && h.x+h.width > player.x && h.y < player.y+player.height && h.y+h.height > player.y) {
+                    if(health < maxHealth) { health = Math.min(maxHealth, health + h.healAmount); updateUI(); }
+                    healthpacks.splice(i,1); i--;
+                }
+            }
+            for(let i=0;i<aoepickups.length;i++) {
+                let a = aoepickups[i];
+                a.y += a.speedY;
+                if(a.y + a.height > ch) { aoepickups.splice(i,1); i--; continue; }
+                if(a.x < player.x+player.width && a.x+a.width > player.x && a.y < player.y+player.height && a.y+a.height > player.y) {
+                    useAOE();
+                    aoepickups.splice(i,1); i--;
+                }
+            }
+            for(let i=0;i<screenClearPickups.length;i++) {
+                let s = screenClearPickups[i];
+                s.y += s.speedY;
+                if(s.y + s.height > ch) { screenClearPickups.splice(i,1); i--; continue; }
+                if(s.x < player.x+player.width && s.x+s.width > player.x && s.y < player.y+player.height && s.y+s.height > player.y) {
+                    useScreenClear();
+                    screenClearPickups.splice(i,1); i--;
+                }
+            }
+        }
+        
+        function updateEffects() {
+            for(let i=0;i<hitEffects.length;i++) {
+                hitEffects[i].timer--;
+                if(hitEffects[i].timer <= 0) hitEffects.splice(i,1);
+            }
+            for(let i=0;i<muzzleFlashes.length;i++) {
+                muzzleFlashes[i].timer--;
+                if(muzzleFlashes[i].timer <= 0) muzzleFlashes.splice(i,1);
+            }
+            if(skillCooldown > 0) skillCooldown--;
+        }
+        
+        function updateGameLogic() {
+            if(!gameRunning) return;
+            let currentDelay = Math.max(1, baseShootDelay - Math.floor(weaponLevel / 6));
+            if(shootCooldown <= 0) {
+                shootBullet();
+                shootCooldown = currentDelay;
+            } else shootCooldown--;
+            updateBullets();
+            for(let e of enemies) e.y += e.speedY;
+            updatePickups();
+            updateEffects();
+            checkEnemiesCross();
+            if(enemySpawnTimer <= 0) {
+                let delay = Math.max(28, 40 - Math.floor(weaponLevel/3));
+                enemySpawnTimer = delay;
+                if(enemies.length < 6) spawnEnemy();
+                else if(enemies.length < 10 && Math.random()<0.5) spawnEnemy();
+            } else enemySpawnTimer--;
+        }
+        
+        function gameOver() {
+            if(!gameRunning) return;
+            gameRunning = false;
+            if(bgmEnabled && audioCtx && musicGain) musicGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            revivePanel.classList.remove('hidden');
+        }
+        
+        function startNewGame(resetAll=true) {
+            if(resetAll) {
+                gameRunning = true;
+                health = maxHealth;
+                weaponLevel = 1;
+                totalScore = 0;
+                wave = 1;
+                enemies = [];
+                powerups = [];
+                healthpacks = [];
+                aoepickups = [];
+                screenClearPickups = [];
+                bullets = [];
+                hitEffects = [];
+                muzzleFlashes = [];
+                enemiesKilledThisWave = 0;
+                eliteSpawnedForWave = false;
+                bossSpawnedForWave = false;
+                skillCooldown = 0;
+                player.x = cw/2;
+                updateUI();
+            } else {
+                gameRunning = true;
+                if(bgmEnabled && audioCtx && musicGain) musicGain.gain.setTargetAtTime(0.35, audioCtx.currentTime, 0.05);
+            }
+            revivePanel.classList.add('hidden');
+            startOverlay.classList.add('hidden');
+            // 开局生成2个敌人
+            for(let i=0;i<2;i++) spawnEnemy();
+        }
+        
+        function revivePlayer() {
+            if(gameRunning) return;
+            if(totalScore >= 6) {
+                totalScore -= 6;
+                health = maxHealth;
+                weaponLevel = 1;
+                enemies = []; powerups = []; healthpacks = []; aoepickups = []; screenClearPickups = []; bullets = [];
+                hitEffects = []; muzzleFlashes = [];
+                gameRunning = true;
+                player.x = cw/2;
+                eliteSpawnedForWave = false; bossSpawnedForWave = false;
+                enemiesKilledThisWave = 0;
+                skillCooldown = 0;
+                updateUI();
+                revivePanel.classList.add('hidden');
+                for(let i=0;i<2;i++) spawnEnemy();
+                if(bgmEnabled) initAndPlayBGM();
+            } else alert("金币不足6，无法复活！点击「重新开局」免费开始新游戏");
+        }
+        
+        function restartGame() {
+            startNewGame(true);
+        }
+        
+        // 商店购买
+        function buyScreenClearItem() {
+            if(!gameRunning) { alert("请先开始游戏！"); return; }
+            if(totalScore >= 5) {
+                totalScore -= 5;
+                updateUI();
+                useScreenClear();
+            } else alert("金币不足5！");
+        }
+        function buyAOEItem() {
+            if(!gameRunning) { alert("请先开始游戏！"); return; }
+            if(totalScore >= 3) {
+                totalScore -= 3;
+                updateUI();
+                useAOE();
+            } else alert("金币不足3！");
+        }
+        
+        // 事件绑定
+        startGameBtn.addEventListener('click', () => { startNewGame(true); });
+        reviveConfirm.addEventListener('click', revivePlayer);
+        reviveCancel.addEventListener('click', () => { revivePanel.classList.add('hidden'); startOverlay.classList.remove('hidden'); gameRunning=false; });
+        restartBtn.addEventListener('click', () => { restartGame(); });
+        openShopBtn.addEventListener('click', () => { if(gameRunning) shopPanel.classList.remove('hidden'); else alert("游戏中才能打开商店"); });
+        closeShopBtn.addEventListener('click', ()=> shopPanel.classList.add('hidden'));
+        buyScreenClear.addEventListener('click', buyScreenClearItem);
+        buyAOE.addEventListener('click', buyAOEItem);
+        skillBtn.addEventListener('click', () => { useActiveSkill(); updateUI(); });
+        settingsBtn.addEventListener('click', toggleMute);
+        
+        // 音频
+        function initAndPlayBGM() {
+            if(!bgmEnabled) return;
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if(musicSource) try{ musicSource.stop(); }catch(e){}
+            musicGain = audioCtx.createGain();
+            musicGain.gain.value = 0.35;
+            musicGain.connect(audioCtx.destination);
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.25;
+            osc1.type = 'sawtooth'; osc2.type = 'square';
+            osc1.frequency.value = 190; osc2.frequency.value = 380;
+            osc1.connect(gainNode); osc2.connect(gainNode);
+            gainNode.connect(musicGain);
+            osc1.start(); osc2.start();
+            const lfo = audioCtx.createOscillator();
+            const lfoGain = audioCtx.createGain();
+            lfo.frequency.value = 7.2;
+            lfoGain.gain.value = 38;
+            lfo.connect(lfoGain); lfoGain.connect(osc1.frequency);
+            lfo.start();
+            const drumLoopFunc = () => {
+                if(!bgmEnabled || !gameRunning) { if(drumTimer) setTimeout(drumLoopFunc, 400); return; }
+                const beat = audioCtx.createBufferSource();
+                const buf = audioCtx.createBuffer(1, 2800, audioCtx.sampleRate);
+                let data = buf.getChannelData(0);
+                for(let i=0;i<2800;i++) data[i] = (Math.random()*2-1)*0.1;
+                beat.buffer = buf;
+                beat.connect(musicGain);
+                beat.start();
+                drumTimer = setTimeout(drumLoopFunc, 270);
+            };
+            if(drumTimer) clearTimeout(drumTimer);
+            drumLoopFunc();
+            musicSource = { stop:()=>{ osc1.stop(); osc2.stop(); lfo.stop(); if(drumTimer) clearTimeout(drumTimer); } };
+        }
+        
+        function toggleMute() {
+            bgmEnabled = !bgmEnabled;
+            volumeIcon.innerText = bgmEnabled ? "🔊" : "🔇";
+            if(bgmEnabled) { if(!audioCtx) initAndPlayBGM(); else if(musicGain) musicGain.gain.setTargetAtTime(0.35, audioCtx.currentTime,0.02); }
+            else if(musicGain) musicGain.gain.setTargetAtTime(0, audioCtx.currentTime,0.02);
+        }
+        
+        // 滑动控制
+        function handleTouchStart(e) { e.preventDefault(); const rect = canvas.getBoundingClientRect(); const scaleX = cw/rect.width; let tx = (e.touches[0].clientX - rect.left)*scaleX; touchStartX = tx; isTouching=true; }
+        function handleTouchMove(e) { if(!isTouching) return; e.preventDefault(); const rect = canvas.getBoundingClientRect(); const scaleX = cw/rect.width; let cx = (e.touches[0].clientX - rect.left)*scaleX; let delta = cx - touchStartX; let newX = player.x + delta; player.x = Math.min(cw - player.width - 8, Math.max(8, newX)); touchStartX = cx; }
+        function handleTouchEnd(e) { e.preventDefault(); isTouching=false; }
+        canvas.addEventListener('touchstart', handleTouchStart, {passive:false});
+        canvas.addEventListener('touchmove', handleTouchMove, {passive:false});
+        canvas.addEventListener('touchend', handleTouchEnd);
+        let mouseDown=false;
+        canvas.addEventListener('mousedown',(e)=>{ e.preventDefault(); const rect=canvas.getBoundingClientRect(); const scaleX=cw/rect.width; let mx=(e.clientX-rect.left)*scaleX; touchStartX=mx; mouseDown=true; });
+        window.addEventListener('mousemove',(e)=>{ if(!mouseDown) return; const rect=canvas.getBoundingClientRect(); const scaleX=cw/rect.width; let mx=(e.clientX-rect.left)*scaleX; let delta=mx-touchStartX; player.x=Math.min(cw - player.width - 8, Math.max(8, player.x+delta)); touchStartX=mx; });
+        window.addEventListener('mouseup',()=>{ mouseDown=false; });
+        
+        function enableAudio() { if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); if(bgmEnabled && !audioCtx && gameRunning) initAndPlayBGM(); canvas.removeEventListener('touchstart', enableAudio); canvas.removeEventListener('mousedown', enableAudio); }
+        canvas.addEventListener('touchstart', enableAudio);
+        canvas.addEventListener('mousedown', enableAudio);
+        
+        // 绘图
+        function draw() {
+            ctx.clearRect(0,0,cw,ch);
+            ctx.fillStyle = '#9ece6b'; ctx.fillRect(0,0,cw,ch);
+            for(let i=0;i<12;i++) { ctx.fillStyle='#7cb342'; ctx.beginPath(); ctx.arc(30+i*40, ch-25, 12,0,Math.PI*2); ctx.fill(); }
+            ctx.fillStyle = '#aa7c4a'; ctx.fillRect(0, ch-28, cw, 28);
+            ctx.fillStyle = '#e0aa6e'; for(let i=0;i<8;i++) ctx.fillRect(i*50+10, ch-22, 30, 10);
+            for(let bullet of bullets) {
+                if(bullet.trail) for(let t=0; t<bullet.trail.length; t++) { ctx.globalAlpha = 0.5 - t*0.1; ctx.fillStyle = `hsl(${35 + t*15}, 100%, 55%)`; ctx.beginPath(); ctx.arc(bullet.trail[t].x, bullet.trail[t].y, 5 - t, 0, Math.PI*2); ctx.fill(); }
+                ctx.globalAlpha = 1;
+                let grad = ctx.createLinearGradient(bullet.x, bullet.y, bullet.x+bullet.width, bullet.y+bullet.height);
+                grad.addColorStop(0, '#ff8800'); grad.addColorStop(1, '#ffdd44');
+                ctx.fillStyle = grad; ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                ctx.fillStyle = 'rgba(255,200,0,0.6)'; ctx.fillRect(bullet.x-1, bullet.y-1, bullet.width+2, bullet.height+2);
+            }
+            ctx.fillStyle = '#2c5e2e'; ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = '#f9c89b'; ctx.fillRect(player.x+6, player.y-8, 24, 12);
+            ctx.fillStyle = '#1a2f1a'; ctx.fillRect(player.x+8, player.y+10, 8, 14); ctx.fillRect(player.x+player.width-16, player.y+10, 8, 14);
+            ctx.fillStyle = 'white'; ctx.fillRect(player.x+8, player.y-3, 6, 6); ctx.fillRect(player.x+player.width-14, player.y-3, 6, 6);
+            ctx.fillStyle = 'black'; ctx.fillRect(player.x+9, player.y-2, 3, 3); ctx.fillRect(player.x+player.width-13, player.y-2, 3,3);
+            for(let flash of muzzleFlashes) { ctx.fillStyle = `rgba(255, 120, 0, 0.9)`; ctx.beginPath(); ctx.ellipse(flash.x + 10, flash.y + 8, 7, 11, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = `rgba(255, 200, 50, 0.7)`; ctx.beginPath(); ctx.ellipse(flash.x + 10, flash.y + 8, 4, 7, 0, 0, Math.PI*2); ctx.fill(); }
+            for(let e of enemies) {
+                ctx.fillStyle = e.type==='elite'?'#b46a3a':(e.type==='boss'?'#aa3e3e':'#a5522b');
+                ctx.fillRect(e.x, e.y, e.width, e.height);
+                ctx.fillStyle = '#f4c542'; ctx.fillRect(e.x+5, e.y-8, e.width-10, 12);
+                if(e.hasShield) { ctx.strokeStyle = '#0ff'; ctx.lineWidth=2; ctx.strokeRect(e.x-2, e.y-2, e.width+4, e.height+4); ctx.fillStyle='rgba(0,255,255,0.2)'; ctx.fillRect(e.x, e.y, e.width, e.height); }
+                let hpPercent = e.hp/e.maxHp;
+                ctx.fillStyle='#bb2200'; ctx.fillRect(e.x, e.y-8, e.width, 5);
+                ctx.fillStyle='#24cc44'; ctx.fillRect(e.x, e.y-8, e.width*hpPercent,5);
+                if(e.hasShield) { let sp=e.shieldHp/(e.type==='boss'?28:12); ctx.fillStyle='#3ac0ff'; ctx.fillRect(e.x, e.y-14, e.width*Math.min(1,sp), 4); }
+            }
+            for(let hit of hitEffects) { ctx.globalAlpha = hit.timer / 8; ctx.fillStyle = '#ffaa44'; ctx.beginPath(); ctx.arc(hit.x, hit.y, 10 - hit.timer, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#ff4400'; ctx.beginPath(); ctx.arc(hit.x, hit.y, 5 - hit.timer/2, 0, Math.PI*2); ctx.fill(); }
+            ctx.globalAlpha = 1;
+            for(let p of powerups) { ctx.fillStyle='#ffc107'; ctx.fillRect(p.x,p.y,20,20); ctx.fillStyle='#b47c00'; ctx.font='bold 16px monospace'; ctx.fillText("⭐", p.x+3, p.y+18); }
+            for(let h of healthpacks) { ctx.fillStyle='#ff4d6d'; ctx.fillRect(h.x,h.y,20,20); ctx.fillStyle='white'; ctx.fillText("❤️", h.x+2, h.y+18); }
+            for(let a of aoepickups) { ctx.fillStyle='#aa66ff'; ctx.fillRect(a.x,a.y,22,22); ctx.fillStyle='white'; ctx.fillText("💥", a.x+3, a.y+18); }
+            for(let s of screenClearPickups) { ctx.fillStyle='#ffaa22'; ctx.fillRect(s.x,s.y,26,26); ctx.fillStyle='black'; ctx.font='bold 18px monospace'; ctx.fillText("✨", s.x+5, s.y+20); }
+            ctx.font='bold 11px monospace'; ctx.fillStyle='white'; ctx.fillText("←滑动移动→ 技能冷却1秒", cw-145, 40);
+        }
+        
+        function gameLoop() { updateGameLogic(); draw(); requestAnimationFrame(gameLoop); }
+        updateUI();
+        gameLoop();
+        startOverlay.classList.remove('hidden');
+    })();
+</script>
+</body>
+</html>
